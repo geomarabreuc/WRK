@@ -9,6 +9,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+
+data class Template(val name: String, val totalMinutes: Int)
 
 sealed interface TimerState {
     data object Idle : TimerState
@@ -23,6 +27,9 @@ class TimerViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<TimerState> = _state
 
     private var tickJob: Job? = null
+
+    private val _templates = MutableStateFlow(loadTemplates())
+    val templates: StateFlow<List<Template>> = _templates
 
     init {
         // Recover a session that survived process death.
@@ -75,8 +82,39 @@ class TimerViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().remove(KEY_END_TIME).remove(KEY_TOTAL).apply()
     }
 
+    fun addTemplate(name: String, totalMinutes: Int) {
+        val trimmed = name.trim().take(24)
+        if (trimmed.isEmpty() || totalMinutes <= 0) return
+        // Same name replaces the old entry.
+        val updated = _templates.value.filterNot { it.name.equals(trimmed, ignoreCase = true) } +
+            Template(trimmed, totalMinutes)
+        _templates.value = updated
+        saveTemplates(updated)
+    }
+
+    fun deleteTemplate(template: Template) {
+        val updated = _templates.value - template
+        _templates.value = updated
+        saveTemplates(updated)
+    }
+
+    private fun loadTemplates(): List<Template> = runCatching {
+        val arr = JSONArray(prefs.getString(KEY_TEMPLATES, "[]"))
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            Template(o.getString("name"), o.getInt("min"))
+        }
+    }.getOrDefault(emptyList())
+
+    private fun saveTemplates(list: List<Template>) {
+        val arr = JSONArray()
+        list.forEach { arr.put(JSONObject().put("name", it.name).put("min", it.totalMinutes)) }
+        prefs.edit().putString(KEY_TEMPLATES, arr.toString()).apply()
+    }
+
     companion object {
         private const val KEY_END_TIME = "end_time"
         private const val KEY_TOTAL = "total"
+        private const val KEY_TEMPLATES = "templates"
     }
 }

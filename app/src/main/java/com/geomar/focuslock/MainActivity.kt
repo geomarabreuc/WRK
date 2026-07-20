@@ -1,6 +1,8 @@
 package com.geomar.focuslock
 
 import android.app.ActivityManager
+import android.media.AudioAttributes
+import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
@@ -29,6 +31,7 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
 
     private val viewModel: TimerViewModel by viewModels()
+    private var alarm: Ringtone? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,12 +79,20 @@ class MainActivity : ComponentActivity() {
                 is TimerState.Idle -> {
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     tryStopLockTask()
+                    stopAlarm()
                 }
             }
         }
 
+        val templates by viewModel.templates.collectAsState()
+
         when (val s = state) {
-            is TimerState.Idle -> SetupScreen(onStart = viewModel::startSession)
+            is TimerState.Idle -> SetupScreen(
+                templates = templates,
+                onStart = viewModel::startSession,
+                onSaveTemplate = viewModel::addTemplate,
+                onDeleteTemplate = viewModel::deleteTemplate,
+            )
             is TimerState.Running -> SessionScreen(
                 remainingMillis = s.remainingMillis,
                 totalMillis = s.totalMillis,
@@ -123,9 +134,34 @@ class MainActivity : ComponentActivity() {
         vibrator.vibrate(
             VibrationEffect.createWaveform(longArrayOf(0, 400, 200, 400, 200, 600), -1)
         )
+        startAlarm()
+    }
+
+    // Loops the system alarm sound until the user taps Done (state returns to Idle).
+    private fun startAlarm() {
+        stopAlarm()
         runCatching {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            RingtoneManager.getRingtone(applicationContext, uri)?.play()
+            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                ?: return
+            alarm = RingtoneManager.getRingtone(applicationContext, uri)?.apply {
+                audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) isLooping = true
+                play()
+            }
         }
+    }
+
+    private fun stopAlarm() {
+        runCatching { alarm?.stop() }
+        alarm = null
+    }
+
+    override fun onDestroy() {
+        stopAlarm()
+        super.onDestroy()
     }
 }

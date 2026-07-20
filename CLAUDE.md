@@ -20,8 +20,8 @@ Professional, minimal, pure black-and-white. Rules live in [ui/Theme.kt](app/src
 
 ## Architecture
 
-- [TimerViewModel.kt](app/src/main/java/com/geomar/focuslock/TimerViewModel.kt) — all timer logic. Wall-clock based: remaining time is always `endTime - System.currentTimeMillis()`, never accumulated ticks (immune to doze/screen-off drift). Recovers running session in `init`.
-- [MainActivity.kt](app/src/main/java/com/geomar/focuslock/MainActivity.kt) — reacts to state: `startLockTask()`/`stopLockTask()`, `FLAG_KEEP_SCREEN_ON`, back-press swallow, completion vibrate+sound. Polls `ActivityManager.lockTaskModeState` every 500ms while running: if user escapes pinning mid-session, SessionScreen shows "Resume focus" (re-pin) and "End session" (two-tap confirm, cancels timer). Those controls never render while pinned.
+- [TimerViewModel.kt](app/src/main/java/com/geomar/focuslock/TimerViewModel.kt) — all timer logic. Wall-clock based: remaining time is always `endTime - System.currentTimeMillis()`, never accumulated ticks (immune to doze/screen-off drift). Recovers running session in `init`. Also owns user task templates (name + duration), persisted as JSON in the same prefs (`templates` key).
+- [MainActivity.kt](app/src/main/java/com/geomar/focuslock/MainActivity.kt) — reacts to state: `startLockTask()`/`stopLockTask()`, `FLAG_KEEP_SCREEN_ON`, back-press swallow, completion vibrate + looping system alarm (`USAGE_ALARM`, stops on Done). Polls `ActivityManager.lockTaskModeState` every 500ms while running: if user escapes pinning mid-session, SessionScreen shows "Resume focus" (re-pin) and "End session" (two-tap confirm, cancels timer). Those controls never render while pinned.
 - [ui/SetupScreen.kt](app/src/main/java/com/geomar/focuslock/ui/SetupScreen.kt), [ui/SessionScreen.kt](app/src/main/java/com/geomar/focuslock/ui/SessionScreen.kt) — dumb composables.
 
 ## Build & install

@@ -65,6 +65,7 @@ fun SessionScreen(
             style = TextStyle(
                 fontSize = if (totalSeconds >= 3600) 68.sp else 96.sp,
                 fontWeight = FontWeight.ExtraLight,
+                fontFeatureSettings = "tnum",
             )
         )
 
