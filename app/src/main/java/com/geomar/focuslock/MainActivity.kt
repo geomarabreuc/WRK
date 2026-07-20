@@ -1,5 +1,6 @@
 package com.geomar.focuslock
 
+import android.app.ActivityManager
 import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
@@ -11,17 +12,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.geomar.focuslock.ui.FinishedScreen
 import com.geomar.focuslock.ui.SessionScreen
 import com.geomar.focuslock.ui.SetupScreen
+import com.geomar.focuslock.ui.WrkTheme
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
 
@@ -30,18 +33,33 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
-                Surface { FocusLockApp() }
+            WrkTheme {
+                Surface { WrkApp() }
             }
         }
     }
 
     @Composable
-    private fun FocusLockApp() {
+    private fun WrkApp() {
         val state by viewModel.state.collectAsState()
+        val running = state is TimerState.Running
 
         // Swallow back press while a session runs.
-        BackHandler(enabled = state is TimerState.Running) {}
+        BackHandler(enabled = running) {}
+
+        // Track whether the task is actually pinned; user can escape pinning
+        // (Back+Recents hold) without ending the session, so poll while running.
+        var pinned by remember { mutableStateOf(false) }
+        LaunchedEffect(running) {
+            if (!running) {
+                pinned = false
+                return@LaunchedEffect
+            }
+            while (true) {
+                pinned = isTaskPinned()
+                delay(500)
+            }
+        }
 
         // React to state transitions: lock/unlock, keep-screen-on, completion alarm.
         LaunchedEffect(state::class) {
@@ -64,9 +82,20 @@ class MainActivity : ComponentActivity() {
 
         when (val s = state) {
             is TimerState.Idle -> SetupScreen(onStart = viewModel::startSession)
-            is TimerState.Running -> SessionScreen(s.remainingMillis, s.totalMillis)
+            is TimerState.Running -> SessionScreen(
+                remainingMillis = s.remainingMillis,
+                totalMillis = s.totalMillis,
+                pinned = pinned,
+                onRePin = ::tryStartLockTask,
+                onCancel = viewModel::cancelSession,
+            )
             is TimerState.Finished -> FinishedScreen(s.totalMillis, onDone = viewModel::acknowledgeFinished)
         }
+    }
+
+    private fun isTaskPinned(): Boolean {
+        val am = getSystemService(ACTIVITY_SERVICE) as ActivityManager
+        return am.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
     }
 
     private fun tryStartLockTask() {

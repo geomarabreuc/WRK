@@ -1,6 +1,15 @@
-# FocusLock
+# WRK
 
-Personal Android deep-work timer. During a session the app pins itself fullscreen (Android screen pinning / `startLockTask`) so the phone is unusable until the countdown ends. Single user (Geomar), not published. Keep it simple — no libraries beyond AndroidX/Compose unless clearly needed.
+Personal Android deep-work timer (app name **WRK**, package still `com.geomar.focuslock`). During a session the app pins itself fullscreen (Android screen pinning / `startLockTask`) so the phone is unusable until the countdown ends. Single user (Geomar), not published. Keep it simple — no libraries beyond AndroidX/Compose unless clearly needed.
+
+## UI conventions
+
+Professional, minimal, pure black-and-white. Rules live in [ui/Theme.kt](app/src/main/java/com/geomar/focuslock/ui/Theme.kt):
+
+- Pure black background, white text; only alpha steps for hierarchy (`WrkDim` 35%, `WrkFaint` 15%). No color, no elevation, no rounded corners (`RectangleShape`).
+- Big numerals: `FontWeight.ExtraLight`, 96–128sp. Labels: `WrkCaption` — uppercase, 12sp, 4sp letterspacing.
+- Shared components: `WrkButton` (solid white primary), `WrkGhostButton` (hairline outline), `WrkCaption`. Reuse them; don't inline one-off buttons.
+- Logo/wordmark: "WRK" letterspaced; launcher icon = white W on near-black (adaptive vector).
 
 ## Stack
 
@@ -12,7 +21,7 @@ Personal Android deep-work timer. During a session the app pins itself fullscree
 ## Architecture
 
 - [TimerViewModel.kt](app/src/main/java/com/geomar/focuslock/TimerViewModel.kt) — all timer logic. Wall-clock based: remaining time is always `endTime - System.currentTimeMillis()`, never accumulated ticks (immune to doze/screen-off drift). Recovers running session in `init`.
-- [MainActivity.kt](app/src/main/java/com/geomar/focuslock/MainActivity.kt) — reacts to state: `startLockTask()`/`stopLockTask()`, `FLAG_KEEP_SCREEN_ON`, back-press swallow, completion vibrate+sound.
+- [MainActivity.kt](app/src/main/java/com/geomar/focuslock/MainActivity.kt) — reacts to state: `startLockTask()`/`stopLockTask()`, `FLAG_KEEP_SCREEN_ON`, back-press swallow, completion vibrate+sound. Polls `ActivityManager.lockTaskModeState` every 500ms while running: if user escapes pinning mid-session, SessionScreen shows "Resume focus" (re-pin) and "End session" (two-tap confirm, cancels timer). Those controls never render while pinned.
 - [ui/SetupScreen.kt](app/src/main/java/com/geomar/focuslock/ui/SetupScreen.kt), [ui/SessionScreen.kt](app/src/main/java/com/geomar/focuslock/ui/SessionScreen.kt) — dumb composables.
 
 ## Build & install

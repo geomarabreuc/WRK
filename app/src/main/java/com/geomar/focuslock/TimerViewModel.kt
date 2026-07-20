@@ -49,6 +49,12 @@ class TimerViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = TimerState.Idle
     }
 
+    fun cancelSession() {
+        tickJob?.cancel()
+        clearSession()
+        _state.value = TimerState.Idle
+    }
+
     private fun startTicking(endTime: Long, total: Long) {
         tickJob?.cancel()
         tickJob = viewModelScope.launch {

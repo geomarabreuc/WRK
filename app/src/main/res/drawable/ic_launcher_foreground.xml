@@ -4,8 +4,8 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- simple hourglass-ish lock mark -->
+    <!-- Capital W, white on near-black, inside the adaptive-icon safe zone -->
     <path
-        android:fillColor="#E8E4D8"
-        android:pathData="M38,34 L70,34 L70,40 L60,54 L70,68 L70,74 L38,74 L38,68 L48,54 L38,40 Z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M31,38 L38.5,38 L44,60.5 L50.5,38 L57.5,38 L64,60.5 L69.5,38 L77,38 L68,70 L60.5,70 L54,48.5 L47.5,70 L40,70 Z" />
 </vector>
