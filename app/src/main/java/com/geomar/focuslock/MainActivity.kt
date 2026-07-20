@@ -23,9 +23,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.geomar.focuslock.ui.FinishedScreen
+import com.geomar.focuslock.ui.HistoryScreen
 import com.geomar.focuslock.ui.SessionScreen
 import com.geomar.focuslock.ui.SetupScreen
 import com.geomar.focuslock.ui.WrkTheme
+import com.geomar.focuslock.ui.currentStreak
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
@@ -85,14 +87,22 @@ class MainActivity : ComponentActivity() {
         }
 
         val templates by viewModel.templates.collectAsState()
+        val workDays by viewModel.workDays.collectAsState()
+        var showHistory by remember { mutableStateOf(false) }
 
         when (val s = state) {
-            is TimerState.Idle -> SetupScreen(
-                templates = templates,
-                onStart = viewModel::startSession,
-                onSaveTemplate = viewModel::addTemplate,
-                onDeleteTemplate = viewModel::deleteTemplate,
-            )
+            is TimerState.Idle -> if (showHistory) {
+                HistoryScreen(workDays = workDays, onBack = { showHistory = false })
+            } else {
+                SetupScreen(
+                    templates = templates,
+                    streak = currentStreak(workDays),
+                    onShowHistory = { showHistory = true },
+                    onStart = viewModel::startSession,
+                    onSaveTemplate = viewModel::addTemplate,
+                    onDeleteTemplate = viewModel::deleteTemplate,
+                )
+            }
             is TimerState.Running -> SessionScreen(
                 remainingMillis = s.remainingMillis,
                 totalMillis = s.totalMillis,

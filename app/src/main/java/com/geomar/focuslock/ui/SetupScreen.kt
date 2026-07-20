@@ -36,6 +36,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -51,6 +52,8 @@ private const val MINUTE_STEP = 5
 @Composable
 fun SetupScreen(
     templates: List<Template>,
+    streak: Int,
+    onShowHistory: () -> Unit,
     onStart: (Int) -> Unit,
     onSaveTemplate: (String, Int) -> Unit,
     onDeleteTemplate: (Template) -> Unit,
@@ -77,6 +80,17 @@ fun SetupScreen(
             letterSpacing = 10.sp,
             modifier = Modifier.padding(top = 8.dp)
         )
+        Box(
+            modifier = Modifier
+                .padding(top = 12.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onShowHistory,
+                )
+        ) {
+            WrkCaption(if (streak > 0) "$streak day streak · calendar" else "calendar")
+        }
 
         Spacer(Modifier.weight(1f))
 
@@ -113,8 +127,6 @@ fun SetupScreen(
                 onSet = { if (hours < 24) minutes = it else minutes = 0 },
             )
         }
-        Spacer(Modifier.height(12.dp))
-        WrkCaption("tap a number to type", color = WrkFaint)
 
         Spacer(Modifier.height(48.dp))
 
@@ -148,7 +160,9 @@ private fun TimeUnit(
 ) {
     var editing by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
+    var hadFocus by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
 
     val numeralStyle = TextStyle(
         fontSize = 76.sp,
@@ -161,6 +175,7 @@ private fun TimeUnit(
     fun commit() {
         text.toIntOrNull()?.let { onSet(it.coerceIn(0, max)) }
         editing = false
+        hadFocus = false
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -179,9 +194,17 @@ private fun TimeUnit(
                 modifier = Modifier
                     .width(120.dp)
                     .focusRequester(focusRequester)
-                    .onFocusChanged { if (!it.isFocused && editing) commit() }
+                    .onFocusChanged {
+                        // Ignore the initial unfocused callback fired on attach;
+                        // only commit once focus was actually gained and then lost.
+                        if (it.isFocused) hadFocus = true
+                        else if (hadFocus && editing) commit()
+                    }
             )
-            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+            LaunchedEffect(Unit) {
+                focusRequester.requestFocus()
+                keyboard?.show()
+            }
         } else {
             Text(
                 if (twoDigits) String.format(Locale.US, "%02d", value) else "$value",
@@ -286,12 +309,19 @@ private fun TemplatesSection(
                     )
                 }
             } else {
-                TemplateChip(
-                    text = "+ save",
-                    emphasized = false,
-                    onClick = { naming = true },
-                    onLongClick = {},
-                )
+                // Square "+" chip — creates a template from the current duration.
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .border(1.dp, WrkFaint)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { naming = true }
+                ) {
+                    Text("+", fontSize = 18.sp, fontWeight = FontWeight.Light, color = WrkDim)
+                }
             }
         }
         if (templates.isNotEmpty()) {

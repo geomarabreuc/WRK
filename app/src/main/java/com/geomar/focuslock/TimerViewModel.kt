@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
 data class Template(val name: String, val totalMinutes: Int)
 
@@ -31,6 +34,9 @@ class TimerViewModel(app: Application) : AndroidViewModel(app) {
     private val _templates = MutableStateFlow(loadTemplates())
     val templates: StateFlow<List<Template>> = _templates
 
+    private val _workDays = MutableStateFlow(loadWorkDays())
+    val workDays: StateFlow<Set<LocalDate>> = _workDays
+
     init {
         // Recover a session that survived process death.
         val endTime = prefs.getLong(KEY_END_TIME, 0L)
@@ -38,6 +44,10 @@ class TimerViewModel(app: Application) : AndroidViewModel(app) {
         if (endTime > System.currentTimeMillis() && total > 0) {
             startTicking(endTime, total)
         } else if (endTime != 0L) {
+            // Timer ran out while the process was dead — still a completed session.
+            if (total > 0) {
+                recordWorkDay(Instant.ofEpochMilli(endTime).atZone(ZoneId.systemDefault()).toLocalDate())
+            }
             clearSession()
         }
     }
@@ -68,6 +78,7 @@ class TimerViewModel(app: Application) : AndroidViewModel(app) {
             while (true) {
                 val remaining = endTime - System.currentTimeMillis()
                 if (remaining <= 0) {
+                    recordWorkDay()
                     clearSession()
                     _state.value = TimerState.Finished(total)
                     break
@@ -112,9 +123,23 @@ class TimerViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putString(KEY_TEMPLATES, arr.toString()).apply()
     }
 
+    private fun recordWorkDay(day: LocalDate = LocalDate.now()) {
+        val updated = _workDays.value + day
+        _workDays.value = updated
+        val arr = JSONArray()
+        updated.sorted().forEach { arr.put(it.toString()) }
+        prefs.edit().putString(KEY_WORK_DAYS, arr.toString()).apply()
+    }
+
+    private fun loadWorkDays(): Set<LocalDate> = runCatching {
+        val arr = JSONArray(prefs.getString(KEY_WORK_DAYS, "[]"))
+        (0 until arr.length()).map { LocalDate.parse(arr.getString(it)) }.toSet()
+    }.getOrDefault(emptySet())
+
     companion object {
         private const val KEY_END_TIME = "end_time"
         private const val KEY_TOTAL = "total"
         private const val KEY_TEMPLATES = "templates"
+        private const val KEY_WORK_DAYS = "work_days"
     }
 }

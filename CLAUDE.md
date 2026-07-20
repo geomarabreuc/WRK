@@ -20,14 +20,16 @@ Professional, minimal, pure black-and-white. Rules live in [ui/Theme.kt](app/src
 
 ## Architecture
 
-- [TimerViewModel.kt](app/src/main/java/com/geomar/focuslock/TimerViewModel.kt) — all timer logic. Wall-clock based: remaining time is always `endTime - System.currentTimeMillis()`, never accumulated ticks (immune to doze/screen-off drift). Recovers running session in `init`. Also owns user task templates (name + duration), persisted as JSON in the same prefs (`templates` key).
+- [TimerViewModel.kt](app/src/main/java/com/geomar/focuslock/TimerViewModel.kt) — all timer logic. Wall-clock based: remaining time is always `endTime - System.currentTimeMillis()`, never accumulated ticks (immune to doze/screen-off drift). Recovers running session in `init`. Also owns user task templates (name + duration, `templates` key) and completed work days (`work_days` key, ISO dates), both persisted as JSON in the same prefs. A session that expires while the process is dead still records its day on next launch.
 - [MainActivity.kt](app/src/main/java/com/geomar/focuslock/MainActivity.kt) — reacts to state: `startLockTask()`/`stopLockTask()`, `FLAG_KEEP_SCREEN_ON`, back-press swallow, completion vibrate + looping system alarm (`USAGE_ALARM`, stops on Done). Polls `ActivityManager.lockTaskModeState` every 500ms while running: if user escapes pinning mid-session, SessionScreen shows "Resume focus" (re-pin) and "End session" (two-tap confirm, cancels timer). Those controls never render while pinned.
 - [ui/SetupScreen.kt](app/src/main/java/com/geomar/focuslock/ui/SetupScreen.kt), [ui/SessionScreen.kt](app/src/main/java/com/geomar/focuslock/ui/SessionScreen.kt) — dumb composables.
+- [ui/HistoryScreen.kt](app/src/main/java/com/geomar/focuslock/ui/HistoryScreen.kt) — streak numeral + Monday-first month calendar of work days; `currentStreak()` counts consecutive days ending today (or yesterday if today not done yet). Opened from a caption on SetupScreen via a local `showHistory` flag in MainActivity.
 
 ## Build & install
 
 ```bash
-export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+# JDK 17 is a homebrew keg (not in /Library/Java, so java_home can't find it)
+export JAVA_HOME=$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home
 ./gradlew assembleDebug          # build APK
 ./gradlew installDebug           # build + install on USB-connected phone
 adb devices                      # verify phone connected
@@ -48,4 +50,4 @@ No emulator setup. Test on physical phone via USB: `./gradlew installDebug`, run
 
 ## Ideas backlog (not built)
 
-Device Owner kiosk mode, session history/stats, foreground service + notification, scheduled sessions, strict-mode toggle.
+Device Owner kiosk mode, richer session stats (durations, totals), foreground service + notification, scheduled sessions, strict-mode toggle.
