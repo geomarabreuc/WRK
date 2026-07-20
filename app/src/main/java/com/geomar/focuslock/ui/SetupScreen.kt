@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -30,29 +32,21 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geomar.focuslock.Template
 import java.util.Locale
 
-private val PRESETS = listOf(25, 50, 90)
 private const val MINUTE_STEP = 5
-
-/** "1h 30m" / "45m" — used on template chips. */
-private fun formatDuration(totalMinutes: Int): String {
-    val h = totalMinutes / 60
-    val m = totalMinutes % 60
-    return when {
-        h == 0 -> "${m}m"
-        m == 0 -> "${h}h"
-        else -> String.format(Locale.US, "%dh %02dm", h, m)
-    }
-}
 
 @Composable
 fun SetupScreen(
@@ -88,11 +82,17 @@ fun SetupScreen(
 
         Row(verticalAlignment = Alignment.Top) {
             TimeUnit(
-                value = "$hours",
+                value = hours,
+                max = 24,
+                twoDigits = false,
                 label = "hours",
                 onDec = { hours = (hours - 1).coerceAtLeast(0) },
                 onInc = {
                     hours = (hours + 1).coerceAtMost(24)
+                    if (hours == 24) minutes = 0
+                },
+                onSet = {
+                    hours = it
                     if (hours == 24) minutes = 0
                 },
             )
@@ -104,30 +104,17 @@ fun SetupScreen(
                 modifier = Modifier.padding(horizontal = 8.dp)
             )
             TimeUnit(
-                value = String.format(Locale.US, "%02d", minutes),
+                value = minutes,
+                max = 59,
+                twoDigits = true,
                 label = "minutes",
                 onDec = { minutes = (minutes - MINUTE_STEP).coerceAtLeast(0) },
-                onInc = { if (hours < 24) minutes = (minutes + MINUTE_STEP).coerceAtMost(55) },
+                onInc = { if (hours < 24) minutes = (minutes + MINUTE_STEP).coerceAtMost(59) },
+                onSet = { if (hours < 24) minutes = it else minutes = 0 },
             )
         }
-
-        Spacer(Modifier.height(40.dp))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(36.dp)) {
-            PRESETS.forEach { preset ->
-                val selected = totalMinutes == preset
-                Text(
-                    formatDuration(preset),
-                    fontSize = 16.sp,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (selected) WrkWhite else WrkDim,
-                    modifier = Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { setTotal(preset) }
-                )
-            }
-        }
+        Spacer(Modifier.height(12.dp))
+        WrkCaption("tap a number to type", color = WrkFaint)
 
         Spacer(Modifier.height(48.dp))
 
@@ -145,25 +132,71 @@ fun SetupScreen(
     }
 }
 
-/** One picker column: big tabular numeral, caption, − / + steppers underneath. */
+/**
+ * One picker column: big numeral (tap to type an exact value), caption,
+ * − / + steppers underneath.
+ */
 @Composable
 private fun TimeUnit(
-    value: String,
+    value: Int,
+    max: Int,
+    twoDigits: Boolean,
     label: String,
     onDec: () -> Unit,
     onInc: () -> Unit,
+    onSet: (Int) -> Unit,
 ) {
+    var editing by remember { mutableStateOf(false) }
+    var text by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+
+    val numeralStyle = TextStyle(
+        fontSize = 76.sp,
+        fontWeight = FontWeight.ExtraLight,
+        color = WrkWhite,
+        textAlign = TextAlign.Center,
+        fontFeatureSettings = "tnum",
+    )
+
+    fun commit() {
+        text.toIntOrNull()?.let { onSet(it.coerceIn(0, max)) }
+        editing = false
+    }
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            value,
-            style = TextStyle(
-                fontSize = 76.sp,
-                fontWeight = FontWeight.ExtraLight,
-                fontFeatureSettings = "tnum",
-            ),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.width(120.dp)
-        )
+        if (editing) {
+            BasicTextField(
+                value = text,
+                onValueChange = { text = it.filter(Char::isDigit).take(2) },
+                singleLine = true,
+                textStyle = numeralStyle,
+                cursorBrush = SolidColor(WrkWhite),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { commit() }),
+                modifier = Modifier
+                    .width(120.dp)
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { if (!it.isFocused && editing) commit() }
+            )
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+        } else {
+            Text(
+                if (twoDigits) String.format(Locale.US, "%02d", value) else "$value",
+                style = numeralStyle,
+                modifier = Modifier
+                    .width(120.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        text = ""
+                        editing = true
+                    }
+            )
+        }
         WrkCaption(label)
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 8.dp)) {
             Stepper("−", onDec)
@@ -189,7 +222,7 @@ private fun Stepper(symbol: String, onClick: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun TemplatesSection(
     templates: List<Template>,
@@ -217,7 +250,7 @@ private fun TemplatesSection(
         ) {
             templates.forEach { template ->
                 TemplateChip(
-                    text = "${template.name}  ${formatDuration(template.totalMinutes)}",
+                    text = template.name,
                     emphasized = template.totalMinutes == currentTotal,
                     onClick = { onSelect(template.totalMinutes) },
                     onLongClick = { onDelete(template) },
@@ -254,7 +287,7 @@ private fun TemplatesSection(
                 }
             } else {
                 TemplateChip(
-                    text = "+ save ${formatDuration(currentTotal)}",
+                    text = "+ save",
                     emphasized = false,
                     onClick = { naming = true },
                     onLongClick = {},
@@ -263,7 +296,7 @@ private fun TemplatesSection(
         }
         if (templates.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
-            WrkCaption("hold to delete", color = WrkFaint)
+            WrkCaption("tap to apply · hold to delete", color = WrkFaint)
         }
     }
 }
