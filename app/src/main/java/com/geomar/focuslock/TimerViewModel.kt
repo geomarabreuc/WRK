@@ -34,8 +34,13 @@ class TimerViewModel(app: Application) : AndroidViewModel(app) {
     private val _templates = MutableStateFlow(loadTemplates())
     val templates: StateFlow<List<Template>> = _templates
 
+    /** Focused minutes per day; multiple sessions on the same day sum. */
     private val _workDays = MutableStateFlow(loadWorkDays())
-    val workDays: StateFlow<Set<LocalDate>> = _workDays
+    val workDays: StateFlow<Map<LocalDate, Int>> = _workDays
+
+    /** Minimum daily minutes for a day to count toward streak/calendar. 0 = any session counts. */
+    private val _minGoal = MutableStateFlow(prefs.getInt(KEY_MIN_GOAL, 0))
+    val minGoal: StateFlow<Int> = _minGoal
 
     init {
         // Recover a session that survived process death.
@@ -46,7 +51,10 @@ class TimerViewModel(app: Application) : AndroidViewModel(app) {
         } else if (endTime != 0L) {
             // Timer ran out while the process was dead — still a completed session.
             if (total > 0) {
-                recordWorkDay(Instant.ofEpochMilli(endTime).atZone(ZoneId.systemDefault()).toLocalDate())
+                recordWorkDay(
+                    minutes = (total / 60_000L).toInt(),
+                    day = Instant.ofEpochMilli(endTime).atZone(ZoneId.systemDefault()).toLocalDate(),
+                )
             }
             clearSession()
         }
@@ -78,7 +86,7 @@ class TimerViewModel(app: Application) : AndroidViewModel(app) {
             while (true) {
                 val remaining = endTime - System.currentTimeMillis()
                 if (remaining <= 0) {
-                    recordWorkDay()
+                    recordWorkDay(minutes = (total / 60_000L).toInt())
                     clearSession()
                     _state.value = TimerState.Finished(total)
                     break
@@ -123,23 +131,39 @@ class TimerViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putString(KEY_TEMPLATES, arr.toString()).apply()
     }
 
-    private fun recordWorkDay(day: LocalDate = LocalDate.now()) {
-        val updated = _workDays.value + day
-        _workDays.value = updated
-        val arr = JSONArray()
-        updated.sorted().forEach { arr.put(it.toString()) }
-        prefs.edit().putString(KEY_WORK_DAYS, arr.toString()).apply()
+    fun setMinGoal(minutes: Int) {
+        val m = minutes.coerceIn(0, 24 * 60)
+        _minGoal.value = m
+        prefs.edit().putInt(KEY_MIN_GOAL, m).apply()
     }
 
-    private fun loadWorkDays(): Set<LocalDate> = runCatching {
-        val arr = JSONArray(prefs.getString(KEY_WORK_DAYS, "[]"))
-        (0 until arr.length()).map { LocalDate.parse(arr.getString(it)) }.toSet()
-    }.getOrDefault(emptySet())
+    private fun recordWorkDay(minutes: Int, day: LocalDate = LocalDate.now()) {
+        if (minutes <= 0) return
+        val updated = _workDays.value + (day to (_workDays.value[day] ?: 0) + minutes)
+        _workDays.value = updated
+        val obj = JSONObject()
+        updated.forEach { (d, m) -> obj.put(d.toString(), m) }
+        prefs.edit().putString(KEY_WORK_DAYS, obj.toString()).apply()
+    }
+
+    private fun loadWorkDays(): Map<LocalDate, Int> {
+        val raw = prefs.getString(KEY_WORK_DAYS, "{}") ?: "{}"
+        runCatching {
+            val obj = JSONObject(raw)
+            return obj.keys().asSequence().associate { LocalDate.parse(it) to obj.getInt(it) }
+        }
+        // Legacy format: JSON array of dates, minutes unknown — kept as 0.
+        return runCatching {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).associate { LocalDate.parse(arr.getString(it)) to 0 }
+        }.getOrDefault(emptyMap())
+    }
 
     companion object {
         private const val KEY_END_TIME = "end_time"
         private const val KEY_TOTAL = "total"
         private const val KEY_TEMPLATES = "templates"
         private const val KEY_WORK_DAYS = "work_days"
+        private const val KEY_MIN_GOAL = "min_goal"
     }
 }

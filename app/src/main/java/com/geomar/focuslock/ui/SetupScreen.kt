@@ -309,19 +309,14 @@ private fun TemplatesSection(
                     )
                 }
             } else {
-                // Square "+" chip — creates a template from the current duration.
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(38.dp)
-                        .border(1.dp, WrkFaint)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { naming = true }
-                ) {
-                    Text("+", fontSize = 18.sp, fontWeight = FontWeight.Light, color = WrkDim)
-                }
+                // "+" chip — creates a template from the current duration.
+                // Built like TemplateChip so it matches their exact size.
+                TemplateChip(
+                    text = "+",
+                    emphasized = false,
+                    onClick = { naming = true },
+                    onLongClick = {},
+                )
             }
         }
         if (templates.isNotEmpty()) {

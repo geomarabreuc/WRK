@@ -28,6 +28,7 @@ import com.geomar.focuslock.ui.SessionScreen
 import com.geomar.focuslock.ui.SetupScreen
 import com.geomar.focuslock.ui.WrkTheme
 import com.geomar.focuslock.ui.currentStreak
+import com.geomar.focuslock.ui.qualifyingDays
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
@@ -88,15 +89,21 @@ class MainActivity : ComponentActivity() {
 
         val templates by viewModel.templates.collectAsState()
         val workDays by viewModel.workDays.collectAsState()
+        val minGoal by viewModel.minGoal.collectAsState()
         var showHistory by remember { mutableStateOf(false) }
 
         when (val s = state) {
             is TimerState.Idle -> if (showHistory) {
-                HistoryScreen(workDays = workDays, onBack = { showHistory = false })
+                HistoryScreen(
+                    workMinutes = workDays,
+                    minGoal = minGoal,
+                    onSetGoal = viewModel::setMinGoal,
+                    onBack = { showHistory = false },
+                )
             } else {
                 SetupScreen(
                     templates = templates,
-                    streak = currentStreak(workDays),
+                    streak = currentStreak(qualifyingDays(workDays, minGoal)),
                     onShowHistory = { showHistory = true },
                     onStart = viewModel::startSession,
                     onSaveTemplate = viewModel::addTemplate,
